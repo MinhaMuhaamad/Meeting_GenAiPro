@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-from openai import OpenAI
+import assemblyai as aai
 from datetime import datetime
 import json
 import tempfile
@@ -458,24 +458,24 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # OpenAI Section
-    st.markdown("#### 🔑 OpenAI API Key")
+    # AssemblyAI Section
+    st.markdown("#### 🔑 AssemblyAI API Key")
     st.caption("Required for audio transcription")
-    openai_api_key = st.text_input(
-        "OpenAI API Key",
+    assemblyai_api_key = st.text_input(
+        "AssemblyAI API Key",
         type="password",
-        placeholder="sk-...",
-        value=os.getenv("OPENAI_API_KEY", ""),
-        key="openai_key",
+        placeholder="Enter your AssemblyAI API key",
+        value=os.getenv("ASSEMBLYAI_API_KEY", "58e21640448c4658b483b99c076b9ab2"),
+        key="assemblyai_key",
         label_visibility="collapsed"
     )
     
-    if openai_api_key:
-        st.success("✅ OpenAI configured")
+    if assemblyai_api_key:
+        st.success("✅ AssemblyAI configured")
     else:
-        st.warning("⚠️ OpenAI key required")
+        st.warning("⚠️ AssemblyAI key required")
         st.markdown("""
-        <a href='https://platform.openai.com/api-keys' target='_blank' class='api-link'>
+        <a href='https://www.assemblyai.com/dashboard/signup' target='_blank' class='api-link'>
             Get API Key
         </a>
         """, unsafe_allow_html=True)
@@ -549,7 +549,7 @@ with st.sidebar:
     
     # Pricing
     st.markdown("### 💰 Pricing")
-    st.markdown("**OpenAI:** $0.006/min")
+    st.markdown("**AssemblyAI:** $0.00025/sec (~$0.015/min)")
     st.markdown("**Gemini:** FREE (1M tokens/day)")
 
 # Main Tabs
@@ -560,7 +560,7 @@ with tab1:
     st.markdown("""
         <div class='banner'>
             <h2>🎤 Upload Meeting Recording</h2>
-            <p>Upload your audio file and let AI transcribe it automatically using OpenAI Whisper</p>
+            <p>Upload your audio file and let AI transcribe it automatically using AssemblyAI</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -588,26 +588,34 @@ with tab1:
             st.markdown("<br/>", unsafe_allow_html=True)
             
             if st.button("🚀 Transcribe Audio", key="transcribe_btn", use_container_width=True):
-                if not openai_api_key:
-                    st.error("⚠️ Please enter your OpenAI API key in the sidebar first!", icon="⚠️")
+                if not assemblyai_api_key:
+                    st.error("⚠️ Please enter your AssemblyAI API key in the sidebar first!", icon="⚠️")
                 else:
                     with st.spinner("🎯 Transcribing audio... Please wait..."):
                         try:
-                            client = OpenAI(api_key=openai_api_key)
+                            # Set AssemblyAI API key
+                            aai.settings.api_key = assemblyai_api_key
                             
+                            # Save audio file temporarily
                             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.name)[1]) as tmp_file:
                                 tmp_file.write(audio_file.getvalue())
                                 tmp_file_path = tmp_file.name
                             
-                            with open(tmp_file_path, "rb") as audio_data:
-                                transcript_response = client.audio.transcriptions.create(
-                                    model="whisper-1",
-                                    file=audio_data,
-                                    response_format="text"
-                                )
+                            # Configure transcription with universal speech model
+                            config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.universal)
                             
+                            # Transcribe audio file
+                            transcript = aai.Transcriber(config=config).transcribe(tmp_file_path)
+                            
+                            # Check for errors
+                            if transcript.status == "error":
+                                raise RuntimeError(f"Transcription failed: {transcript.error}")
+                            
+                            # Clean up temp file
                             os.unlink(tmp_file_path)
-                            st.session_state.transcript = transcript_response
+                            
+                            # Save transcript to session state
+                            st.session_state.transcript = transcript.text
                             
                             st.success("✅ Transcription completed successfully!", icon="✅")
                             st.balloons()
